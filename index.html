@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labyrinthe - Jeu de Puzzle</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .game-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #fff;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 2em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Zone 1 - Le Damier */
+        .grid-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .grid-header {
+            display: flex;
+            margin-left: 40px;
+        }
+
+        .grid-header span {
+            width: 60px;
+            text-align: center;
+            color: #fff;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .grid-row {
+            display: flex;
+            align-items: center;
+        }
+
+        .row-label {
+            width: 40px;
+            text-align: center;
+            color: #fff;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(5, 60px);
+            grid-template-rows: repeat(5, 60px);
+            gap: 2px;
+            background: #333;
+            padding: 2px;
+            border-radius: 10px;
+        }
+
+        .cell {
+            width: 60px;
+            height: 60px;
+            background: #e8e8e8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .cell.wall {
+            background: #2c3e50;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .cell.start {
+            background: #27ae60;
+        }
+
+        .cell.end {
+            background: #e74c3c;
+        }
+
+        .cell.player {
+            background: #3498db;
+        }
+
+        .cell.error {
+            animation: errorBlink 0.2s ease-in-out 3;
+        }
+
+        @keyframes errorBlink {
+            0%, 100% { background: #e74c3c; }
+            50% { background: #c0392b; }
+        }
+
+        .player-icon {
+            width: 40px;
+            height: 40px;
+            position: relative;
+        }
+
+        .player-icon::before {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-bottom: 30px solid #f1c40f;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: transform 0.3s ease;
+        }
+
+        .player-icon.north::before { transform: translate(-50%, -50%) rotate(0deg); }
+        .player-icon.east::before { transform: translate(-50%, -50%) rotate(90deg); }
+        .player-icon.south::before { transform: translate(-50%, -50%) rotate(180deg); }
+        .player-icon.west::before { transform: translate(-50%, -50%) rotate(-90deg); }
+
+        .end-marker {
+            width: 30px;
+            height: 30px;
+            background: #fff;
+            border-radius: 50%;
+            border: 4px solid #c0392b;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        /* Zone 2 - Séquenceur */
+        .sequence-zone {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            min-height: 80px;
+        }
+
+        .sequence-zone h3 {
+            color: #fff;
+            margin-bottom: 10px;
+            font-size: 1em;
+        }
+
+        .sequence-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            min-height: 50px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+        }
+
+        .sequence-container.drag-over {
+            border-color: #3498db;
+            background: rgba(52, 152, 219, 0.2);
+        }
+
+        /* Zone 3 - Sélection des directions */
+        .controls-zone {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .controls-zone h3 {
+            color: #fff;
+            margin-bottom: 10px;
+            font-size: 1em;
+        }
+
+        .direction-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .direction-btn {
+            width: 60px;
+            height: 60px;
+            border: none;
+            border-radius: 10px;
+            cursor: grab;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5em;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .direction-btn:active {
+            cursor: grabbing;
+        }
+
+        .direction-btn.forward {
+            background: linear-gradient(145deg, #27ae60, #1e8449);
+            color: white;
+        }
+
+        .direction-btn.backward {
+            background: linear-gradient(145deg, #e67e22, #d35400);
+            color: white;
+        }
+
+        .direction-btn.rotate-left {
+            background: linear-gradient(145deg, #9b59b6, #8e44ad);
+            color: white;
+        }
+
+        .direction-btn.rotate-right {
+            background: linear-gradient(145deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .direction-btn.disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .direction-btn:hover:not(.disabled) {
+            transform: scale(1.1);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .sequence-item {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2em;
+            cursor: grab;
+            position: relative;
+        }
+
+        .sequence-item:active {
+            cursor: grabbing;
+        }
+
+        .sequence-item.forward { background: linear-gradient(145deg, #27ae60, #1e8449); color: white; }
+        .sequence-item.backward { background: linear-gradient(145deg, #e67e22, #d35400); color: white; }
+        .sequence-item.rotate-left { background: linear-gradient(145deg, #9b59b6, #8e44ad); color: white; }
+        .sequence-item.rotate-right { background: linear-gradient(145deg, #3498db, #2980b9); color: white; }
+
+        .sequence-item .remove-btn {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 18px;
+            height: 18px;
+            background: #e74c3c;
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .sequence-item:hover .remove-btn {
+            opacity: 1;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .action-btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn.execute {
+            background: linear-gradient(145deg, #27ae60, #1e8449);
+            color: white;
+        }
+
+        .action-btn.reset {
+            background: linear-gradient(145deg, #95a5a6, #7f8c8d);
+            color: white;
+        }
+
+        .action-btn.new-game {
+            background: linear-gradient(145deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Messages */
+        .message {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .message.success {
+            display: block;
+            background: rgba(39, 174, 96, 0.3);
+            color: #27ae60;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .message.error {
+            display: block;
+            background: rgba(231, 76, 60, 0.3);
+            color: #e74c3c;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: #fff;
+            font-size: 0.9em;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .legend-color.start { background: #27ae60; }
+        .legend-color.end { background: #e74c3c; }
+        .legend-color.wall { background: #2c3e50; }
+        .legend-color.player { background: #f1c40f; }
+
+        /* Responsive */
+        @media (max-width: 500px) {
+            .cell, .grid {
+                grid-template-columns: repeat(5, 50px);
+                grid-template-rows: repeat(5, 50px);
+            }
+            .cell {
+                width: 50px;
+                height: 50px;
+            }
+            .grid-header span {
+                width: 50px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🎯 Labyrinthe</h1>
+
+        <!-- Zone 1 - Le Damier -->
+        <div class="grid-container">
+            <div class="grid-header">
+                <span>A</span>
+                <span>B</span>
+                <span>C</span>
+                <span>D</span>
+                <span>E</span>
+            </div>
+            <div id="grid-rows"></div>
+        </div>
+
+        <!-- Zone 2 - Séquenceur -->
+        <div class="sequence-zone">
+            <h3>📋 Séquence de déplacements (Zone 2)</h3>
+            <div id="sequence-container" class="sequence-container"></div>
+        </div>
+
+        <!-- Zone 3 - Sélection des directions -->
+        <div class="controls-zone">
+            <h3>🎮 Actions disponibles (Zone 3)</h3>
+            <div id="direction-buttons" class="direction-buttons"></div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <button class="action-btn execute" id="execute-btn" onclick="executeSequence()">▶️ Exécuter</button>
+            <button class="action-btn reset" id="reset-btn" onclick="resetSequence()">🔄 Reset</button>
+            <button class="action-btn new-game" onclick="newGame()">🎲 Nouvelle Partie</button>
+        </div>
+
+        <!-- Message -->
+        <div id="message" class="message"></div>
+
+        <!-- Legend -->
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color start"></div> Départ</div>
+            <div class="legend-item"><div class="legend-color end"></div> Arrivée</div>
+            <div class="legend-item"><div class="legend-color wall"></div> Mur</div>
+            <div class="legend-item"><div class="legend-color player"></div> Joueur</div>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        const GRID_SIZE = 5;
+        const COLUMNS = ['A', 'B', 'C', 'D', 'E'];
+        const DIRECTIONS = ['north', 'east', 'south', 'west'];
+
+        let gameState = {
+            grid: [],
+            playerPos: { x: 0, y: 0 },
+            playerDir: 'north',
+            startPos: { x: 0, y: 0 },
+            endPos: { x: 0, y: 0 },
+            walls: [],
+            availableActions: [],
+            sequence: [],
+            isExecuting: false
+        };
+
+        // Action types
+        const ACTIONS = {
+            FORWARD: { type: 'forward', icon: '⬆️', label: 'Avant' },
+            BACKWARD: { type: 'backward', icon: '⬇️', label: 'Recul' },
+            ROTATE_LEFT: { type: 'rotate-left', icon: '↪️', label: 'Rotation Gauche' },
+            ROTATE_RIGHT: { type: 'rotate-right', icon: '↩️', label: 'Rotation Droite' }
+        };
+
+        // Initialize the game
+        function initGame() {
+            createGrid();
+            newGame();
+        }
+
+        // Create the grid HTML
+        function createGrid() {
+            const gridRows = document.getElementById('grid-rows');
+            gridRows.innerHTML = '';
+
+            for (let y = 0; y < GRID_SIZE; y++) {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'grid-row';
+
+                const rowLabel = document.createElement('span');
+                rowLabel.className = 'row-label';
+                rowLabel.textContent = y + 1;
+                rowDiv.appendChild(rowLabel);
+
+                const gridDiv = document.createElement('div');
+                gridDiv.className = 'grid';
+                gridDiv.style.display = 'contents';
+
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = `cell-${x}-${y}`;
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    rowDiv.appendChild(cell);
+                }
+
+                gridRows.appendChild(rowDiv);
+            }
+        }
+
+        // Generate a new random game
+        function newGame() {
+            hideMessage();
+            gameState.isExecuting = false;
+            gameState.sequence = [];
+
+            // Clear grid
+            gameState.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            gameState.walls = [];
+
+            // Generate random start and end positions
+            do {
+                gameState.startPos = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+                gameState.endPos = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+            } while (
+                (gameState.startPos.x === gameState.endPos.x && gameState.startPos.y === gameState.endPos.y) ||
+                Math.abs(gameState.startPos.x - gameState.endPos.x) + Math.abs(gameState.startPos.y - gameState.endPos.y) < 3
+            );
+
+            // Set player position and random direction
+            gameState.playerPos = { ...gameState.startPos };
+            gameState.playerDir = DIRECTIONS[Math.floor(Math.random() * 4)];
+
+            // Generate walls (ensuring path exists)
+            generateWalls();
+
+            // Generate solution and available actions
+            generateSolution();
+
+            // Render everything
+            renderGrid();
+            renderDirectionButtons();
+            renderSequence();
+        }
+
+        // Generate walls ensuring a path exists
+        function generateWalls() {
+            const numWalls = Math.floor(Math.random() * 5) + 3; // 3-7 walls
+            let attempts = 0;
+
+            while (gameState.walls.length < numWalls && attempts < 100) {
+                const wallPos = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+
+                // Don't place wall on start or end
+                if ((wallPos.x === gameState.startPos.x && wallPos.y === gameState.startPos.y) ||
+                    (wallPos.x === gameState.endPos.x && wallPos.y === gameState.endPos.y)) {
+                    attempts++;
+                    continue;
+                }
+
+                // Don't place duplicate walls
+                if (gameState.walls.some(w => w.x === wallPos.x && w.y === wallPos.y)) {
+                    attempts++;
+                    continue;
+                }
+
+                // Temporarily add wall and check if path exists
+                gameState.walls.push(wallPos);
+
+                if (!pathExists()) {
+                    gameState.walls.pop();
+                }
+
+                attempts++;
+            }
+        }
+
+        // Check if a path exists using BFS
+        function pathExists() {
+            const visited = new Set();
+            const queue = [{ ...gameState.startPos }];
+
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const key = `${current.x},${current.y}`;
+
+                if (visited.has(key)) continue;
+                visited.add(key);
+
+                if (current.x === gameState.endPos.x && current.y === gameState.endPos.y) {
+                    return true;
+                }
+
+                // Check all 4 directions
+                const neighbors = [
+                    { x: current.x, y: current.y - 1 },
+                    { x: current.x + 1, y: current.y },
+                    { x: current.x, y: current.y + 1 },
+                    { x: current.x - 1, y: current.y }
+                ];
+
+                for (const neighbor of neighbors) {
+                    if (neighbor.x >= 0 && neighbor.x < GRID_SIZE &&
+                        neighbor.y >= 0 && neighbor.y < GRID_SIZE &&
+                        !gameState.walls.some(w => w.x === neighbor.x && w.y === neighbor.y) &&
+                        !visited.has(`${neighbor.x},${neighbor.y}`)) {
+                        queue.push(neighbor);
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // Generate solution and create available actions
+        function generateSolution() {
+            const solution = findSolution();
+            gameState.availableActions = [...solution];
+
+            // Shuffle the available actions for display
+            for (let i = gameState.availableActions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [gameState.availableActions[i], gameState.availableActions[j]] =
+                [gameState.availableActions[j], gameState.availableActions[i]];
+            }
+        }
+
+        // Find solution using BFS with directions
+        function findSolution() {
+            const visited = new Map();
+            const queue = [{
+                pos: { ...gameState.startPos },
+                dir: gameState.playerDir,
+                actions: []
+            }];
+
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const key = `${current.pos.x},${current.pos.y},${current.dir}`;
+
+                if (visited.has(key)) continue;
+                visited.set(key, true);
+
+                if (current.pos.x === gameState.endPos.x && current.pos.y === gameState.endPos.y) {
+                    return current.actions;
+                }
+
+                // Try all possible actions
+                const possibleActions = [
+                    { type: 'forward', ...moveForward(current.pos, current.dir) },
+                    { type: 'backward', ...moveBackward(current.pos, current.dir) },
+                    { type: 'rotate-left', pos: current.pos, dir: rotateLeft(current.dir) },
+                    { type: 'rotate-right', pos: current.pos, dir: rotateRight(current.dir) }
+                ];
+
+                for (const action of possibleActions) {
+                    const newKey = `${action.pos.x},${action.pos.y},${action.dir}`;
+
+                    if (!visited.has(newKey) && isValidPosition(action.pos)) {
+                        queue.push({
+                            pos: action.pos,
+                            dir: action.dir,
+                            actions: [...current.actions, action.type]
+                        });
+                    }
+                }
+            }
+
+            // Fallback: simple path
+            return ['forward', 'rotate-right', 'forward'];
+        }
+
+        // Movement helpers
+        function moveForward(pos, dir) {
+            const newPos = { ...pos };
+            switch (dir) {
+                case 'north': newPos.y--; break;
+                case 'south': newPos.y++; break;
+                case 'east': newPos.x++; break;
+                case 'west': newPos.x--; break;
+            }
+            return { pos: newPos, dir };
+        }
+
+        function moveBackward(pos, dir) {
+            const newPos = { ...pos };
+            switch (dir) {
+                case 'north': newPos.y++; break;
+                case 'south': newPos.y--; break;
+                case 'east': newPos.x--; break;
+                case 'west': newPos.x++; break;
+            }
+            return { pos: newPos, dir };
+        }
+
+        function rotateLeft(dir) {
+            const index = DIRECTIONS.indexOf(dir);
+            return DIRECTIONS[(index + 3) % 4];
+        }
+
+        function rotateRight(dir) {
+            const index = DIRECTIONS.indexOf(dir);
+            return DIRECTIONS[(index + 1) % 4];
+        }
+
+        function isValidPosition(pos) {
+            return pos.x >= 0 && pos.x < GRID_SIZE &&
+                   pos.y >= 0 && pos.y < GRID_SIZE &&
+                   !gameState.walls.some(w => w.x === pos.x && w.y === pos.y);
+        }
+
+        // Render the grid
+        function renderGrid() {
+            // Clear all cells
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = document.getElementById(`cell-${x}-${y}`);
+                    cell.className = 'cell';
+                    cell.innerHTML = '';
+                }
+            }
+
+            // Render walls
+            for (const wall of gameState.walls) {
+                const cell = document.getElementById(`cell-${wall.x}-${wall.y}`);
+                cell.classList.add('wall');
+            }
+
+            // Render start
+            const startCell = document.getElementById(`cell-${gameState.startPos.x}-${gameState.startPos.y}`);
+            startCell.classList.add('start');
+
+            // Render end
+            const endCell = document.getElementById(`cell-${gameState.endPos.x}-${gameState.endPos.y}`);
+            endCell.classList.add('end');
+            if (!(gameState.playerPos.x === gameState.endPos.x && gameState.playerPos.y === gameState.endPos.y)) {
+                endCell.innerHTML = '<div class="end-marker"></div>';
+            }
+
+            // Render player
+            const playerCell = document.getElementById(`cell-${gameState.playerPos.x}-${gameState.playerPos.y}`);
+            playerCell.classList.add('player');
+            playerCell.innerHTML = `<div class="player-icon ${gameState.playerDir}"></div>`;
+        }
+
+        // Render direction buttons
+        function renderDirectionButtons() {
+            const container = document.getElementById('direction-buttons');
+            container.innerHTML = '';
+
+            const actionTypes = ['forward', 'backward', 'rotate-left', 'rotate-right'];
+            const actionIcons = {
+                'forward': '⬆️',
+                'backward': '⬇️',
+                'rotate-left': '↪️',
+                'rotate-right': '↩️'
+            };
+
+            // Count available actions of each type
+            const actionCounts = {};
+            for (const action of gameState.availableActions) {
+                actionCounts[action] = (actionCounts[action] || 0) + 1;
+            }
+
+            // Count used actions
+            const usedCounts = {};
+            for (const action of gameState.sequence) {
+                usedCounts[action] = (usedCounts[action] || 0) + 1;
+            }
+
+            // Create buttons for each available action
+            for (const actionType of actionTypes) {
+                const total = actionCounts[actionType] || 0;
+                const used = usedCounts[actionType] || 0;
+                const remaining = total - used;
+
+                for (let i = 0; i < total; i++) {
+                    const btn = document.createElement('div');
+                    btn.className = `direction-btn ${actionType}`;
+                    btn.innerHTML = actionIcons[actionType];
+                    btn.dataset.action = actionType;
+                    btn.dataset.index = i;
+
+                    if (i < used) {
+                        btn.classList.add('disabled');
+                    } else {
+                        btn.draggable = true;
+                        btn.addEventListener('dragstart', handleDragStart);
+                        btn.addEventListener('dragend', handleDragEnd);
+                    }
+
+                    container.appendChild(btn);
+                }
+            }
+        }
+
+        // Render sequence
+        function renderSequence() {
+            const container = document.getElementById('sequence-container');
+            container.innerHTML = '';
+
+            const actionIcons = {
+                'forward': '⬆️',
+                'backward': '⬇️',
+                'rotate-left': '↪️',
+                'rotate-right': '↩️'
+            };
+
+            gameState.sequence.forEach((action, index) => {
+                const item = document.createElement('div');
+                item.className = `sequence-item ${action}`;
+                item.innerHTML = `
+                    ${actionIcons[action]}
+                    <button class="remove-btn" onclick="removeFromSequence(${index})">×</button>
+                `;
+                item.draggable = true;
+                item.dataset.index = index;
+                item.addEventListener('dragstart', handleSequenceDragStart);
+                item.addEventListener('dragend', handleDragEnd);
+                item.addEventListener('dragover', handleSequenceDragOver);
+                item.addEventListener('drop', handleSequenceDrop);
+
+                container.appendChild(item);
+            });
+        }
+
+        // Drag and Drop handlers
+        let draggedAction = null;
+        let draggedIndex = null;
+        let isReordering = false;
+
+        function handleDragStart(e) {
+            draggedAction = e.target.dataset.action;
+            draggedIndex = null;
+            isReordering = false;
+            e.target.style.opacity = '0.5';
+        }
+
+        function handleSequenceDragStart(e) {
+            draggedIndex = parseInt(e.target.dataset.index);
+            draggedAction = gameState.sequence[draggedIndex];
+            isReordering = true;
+            e.target.style.opacity = '0.5';
+        }
+
+        function handleDragEnd(e) {
+            e.target.style.opacity = '1';
+            draggedAction = null;
+            draggedIndex = null;
+            isReordering = false;
+        }
+
+        function handleSequenceDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleSequenceDrop(e) {
+            e.preventDefault();
+            if (isReordering && draggedIndex !== null) {
+                const targetIndex = parseInt(e.target.closest('.sequence-item').dataset.index);
+                if (draggedIndex !== targetIndex) {
+                    const item = gameState.sequence.splice(draggedIndex, 1)[0];
+                    gameState.sequence.splice(targetIndex, 0, item);
+                    renderSequence();
+                }
+            }
+        }
+
+        // Setup sequence container drop zone
+        document.addEventListener('DOMContentLoaded', () => {
+            const sequenceContainer = document.getElementById('sequence-container');
+
+            sequenceContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                sequenceContainer.classList.add('drag-over');
+            });
+
+            sequenceContainer.addEventListener('dragleave', () => {
+                sequenceContainer.classList.remove('drag-over');
+            });
+
+            sequenceContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                sequenceContainer.classList.remove('drag-over');
+
+                if (!isReordering && draggedAction) {
+                    addToSequence(draggedAction);
+                }
+            });
+        });
+
+        // Add action to sequence
+        function addToSequence(action) {
+            gameState.sequence.push(action);
+            renderDirectionButtons();
+            renderSequence();
+            hideMessage();
+        }
+
+        // Remove action from sequence
+        function removeFromSequence(index) {
+            gameState.sequence.splice(index, 1);
+            renderDirectionButtons();
+            renderSequence();
+        }
+
+        // Reset sequence
+        function resetSequence() {
+            gameState.sequence = [];
+            gameState.playerPos = { ...gameState.startPos };
+            gameState.playerDir = DIRECTIONS[Math.floor(Math.random() * 4)];
+            // Keep the same direction as at game start - need to store it
+            renderGrid();
+            renderDirectionButtons();
+            renderSequence();
+            hideMessage();
+        }
+
+        // Execute sequence
+        async function executeSequence() {
+            if (gameState.isExecuting || gameState.sequence.length === 0) return;
+
+            gameState.isExecuting = true;
+            document.getElementById('execute-btn').disabled = true;
+            document.getElementById('reset-btn').disabled = true;
+
+            // Reset player position
+            gameState.playerPos = { ...gameState.startPos };
+            renderGrid();
+
+            let success = true;
+
+            for (let i = 0; i < gameState.sequence.length; i++) {
+                const action = gameState.sequence[i];
+
+                // Highlight current action in sequence
+                highlightSequenceItem(i);
+
+                await delay(500);
+
+                // Execute action
+                const result = executeAction(action);
+
+                if (!result.valid) {
+                    // Show error
+                    const cell = document.getElementById(`cell-${gameState.playerPos.x}-${gameState.playerPos.y}`);
+                    cell.classList.add('error');
+                    await delay(600);
+                    showMessage('Collision avec un mur ! Séquence réinitialisée.', 'error');
+                    success = false;
+                    break;
+                }
+
+                // Update position/direction
+                if (result.newPos) {
+                    gameState.playerPos = result.newPos;
+                }
+                if (result.newDir) {
+                    gameState.playerDir = result.newDir;
+                }
+
+                renderGrid();
+
+                // Check win condition
+                if (gameState.playerPos.x === gameState.endPos.x &&
+                    gameState.playerPos.y === gameState.endPos.y) {
+                    await delay(300);
+                    showMessage('🎉 Félicitations ! Vous avez atteint l\'arrivée !', 'success');
+                    success = true;
+                    break;
+                }
+            }
+
+            clearSequenceHighlight();
+
+            if (success && !(gameState.playerPos.x === gameState.endPos.x &&
+                            gameState.playerPos.y === gameState.endPos.y)) {
+                showMessage('Séquence terminée mais vous n\'avez pas atteint l\'arrivée.', 'error');
+            }
+
+            gameState.isExecuting = false;
+            document.getElementById('execute-btn').disabled = false;
+            document.getElementById('reset-btn').disabled = false;
+        }
+
+        // Execute a single action
+        function executeAction(action) {
+            let newPos = { ...gameState.playerPos };
+            let newDir = gameState.playerDir;
+
+            switch (action) {
+                case 'forward':
+                    const fwd = moveForward(gameState.playerPos, gameState.playerDir);
+                    newPos = fwd.pos;
+                    break;
+                case 'backward':
+                    const bwd = moveBackward(gameState.playerPos, gameState.playerDir);
+                    newPos = bwd.pos;
+                    break;
+                case 'rotate-left':
+                    newDir = rotateLeft(gameState.playerDir);
+                    return { valid: true, newDir };
+                case 'rotate-right':
+                    newDir = rotateRight(gameState.playerDir);
+                    return { valid: true, newDir };
+            }
+
+            // Check if new position is valid
+            if (!isValidPosition(newPos)) {
+                return { valid: false };
+            }
+
+            return { valid: true, newPos };
+        }
+
+        // Highlight sequence item
+        function highlightSequenceItem(index) {
+            const items = document.querySelectorAll('.sequence-item');
+            items.forEach((item, i) => {
+                item.style.transform = i === index ? 'scale(1.2)' : 'scale(1)';
+                item.style.boxShadow = i === index ? '0 0 20px rgba(255,255,255,0.5)' : 'none';
+            });
+        }
+
+        function clearSequenceHighlight() {
+            const items = document.querySelectorAll('.sequence-item');
+            items.forEach(item => {
+                item.style.transform = 'scale(1)';
+                item.style.boxShadow = 'none';
+            });
+        }
+
+        // Show message
+        function showMessage(text, type) {
+            const msgEl = document.getElementById('message');
+            msgEl.textContent = text;
+            msgEl.className = `message ${type}`;
+        }
+
+        function hideMessage() {
+            const msgEl = document.getElementById('message');
+            msgEl.className = 'message';
+        }
+
+        // Utility
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Start the game
+        initGame();
+    </script>
+</body>
+</html>
