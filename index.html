@@ -477,6 +477,7 @@
             playerPos: { x: 0, y: 0 },
             playerDir: 'north',
             startPos: { x: 0, y: 0 },
+            startDir: 'north',
             endPos: { x: 0, y: 0 },
             walls: [],
             availableActions: [],
@@ -557,6 +558,7 @@
             // Set player position and random direction
             gameState.playerPos = { ...gameState.startPos };
             gameState.playerDir = DIRECTIONS[Math.floor(Math.random() * 4)];
+            gameState.startDir = gameState.playerDir;
 
             // Generate walls (ensuring path exists)
             generateWalls();
@@ -938,8 +940,7 @@
         function resetSequence() {
             gameState.sequence = [];
             gameState.playerPos = { ...gameState.startPos };
-            gameState.playerDir = DIRECTIONS[Math.floor(Math.random() * 4)];
-            // Keep the same direction as at game start - need to store it
+            gameState.playerDir = gameState.startDir;
             renderGrid();
             renderDirectionButtons();
             renderSequence();
