@@ -530,89 +530,69 @@
             }
         }
 
-        // Generate a new random game
+        // Generate a new random game by CONSTRUCTING a valid solution first
         function newGame() {
             hideMessage();
             gameState.isExecuting = false;
             gameState.sequence = [];
 
-            let attempts = 0;
             let validLevel = false;
+            let attempts = 0;
 
-            // Keep generating until we get a level with both rotation types
-            while (!validLevel && attempts < 200) {
+            while (!validLevel && attempts < 100) {
                 attempts++;
 
                 // Clear grid
                 gameState.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
                 gameState.walls = [];
 
-                // Generate random start and end positions with better spacing
-                do {
-                    gameState.startPos = {
-                        x: Math.floor(Math.random() * GRID_SIZE),
-                        y: Math.floor(Math.random() * GRID_SIZE)
-                    };
-                    gameState.endPos = {
-                        x: Math.floor(Math.random() * GRID_SIZE),
-                        y: Math.floor(Math.random() * GRID_SIZE)
-                    };
-                } while (
-                    (gameState.startPos.x === gameState.endPos.x && gameState.startPos.y === gameState.endPos.y) ||
-                    Math.abs(gameState.startPos.x - gameState.endPos.x) + Math.abs(gameState.startPos.y - gameState.endPos.y) < 4
-                );
+                // Step 1: Choose random start position
+                gameState.startPos = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
 
-                // Set player position and random direction
-                gameState.playerPos = { ...gameState.startPos };
+                // Step 2: Choose random starting direction
                 gameState.playerDir = DIRECTIONS[Math.floor(Math.random() * 4)];
                 gameState.startDir = gameState.playerDir;
+                gameState.playerPos = { ...gameState.startPos };
 
-                // Generate walls (ensuring path exists)
-                generateWalls();
+                // Step 3: CONSTRUCT a solution with both rotation types
+                const constructedSolution = constructSolutionWithBothRotations();
 
-                // Generate solution and available actions
-                const solution = findSolution();
+                // Step 4: Simulate the solution to find the end position
+                const endResult = simulateSolution(constructedSolution, gameState.startPos, gameState.startDir);
 
-                // Validate solution exists and works
-                if (!solution || solution.length === 0) continue;
+                if (!endResult) continue;
 
-                // Verify the solution actually solves the puzzle
-                if (!validateSolution(solution)) continue;
+                // Step 5: Verify end position is valid and not too close
+                const distance = Math.abs(endResult.pos.x - gameState.startPos.x) +
+                                Math.abs(endResult.pos.y - gameState.startPos.y);
 
-                // Check if solution contains both rotation types
-                const hasLeft = solution.includes('rotate-left');
-                const hasRight = solution.includes('rotate-right');
+                if (distance < 3) continue;
 
-                if (hasLeft && hasRight) {
-                    gameState.availableActions = [...solution];
-                    validLevel = true;
-                }
+                gameState.endPos = endResult.pos;
+
+                // Step 6: Place walls that don't interfere with the solution path
+                placeWallsAroundSolution(constructedSolution);
+
+                // Step 7: Verify the solution still works after placing walls
+                if (!validateSolution(constructedSolution)) continue;
+
+                // Success! We have a valid level
+                gameState.availableActions = [...constructedSolution];
+                validLevel = true;
             }
 
-            // If we still couldn't find a valid level, try one more time with fewer walls
+            // Fallback if we couldn't generate a valid level
             if (!validLevel) {
-                gameState.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
-                gameState.walls = [];
-
-                // Simpler setup
                 gameState.startPos = { x: 0, y: 0 };
                 gameState.endPos = { x: 4, y: 4 };
                 gameState.playerPos = { ...gameState.startPos };
-                gameState.playerDir = 'north';
-                gameState.startDir = 'north';
-
-                // Add a few strategic walls to force turns
-                gameState.walls = [
-                    { x: 1, y: 0 },
-                    { x: 0, y: 1 },
-                    { x: 3, y: 4 },
-                    { x: 4, y: 3 }
-                ];
-
-                const solution = findSolution();
-                if (solution && validateSolution(solution)) {
-                    gameState.availableActions = [...solution];
-                }
+                gameState.playerDir = 'east';
+                gameState.startDir = 'east';
+                gameState.walls = [];
+                gameState.availableActions = ['forward', 'forward', 'rotate-left', 'forward', 'rotate-right', 'forward', 'forward'];
             }
 
             // Shuffle the available actions for display
@@ -626,6 +606,128 @@
             renderGrid();
             renderDirectionButtons();
             renderSequence();
+        }
+
+        // Construct a solution that guarantees both rotation types
+        function constructSolutionWithBothRotations() {
+            const solution = [];
+            const minActions = 5;
+            const maxActions = 10;
+            const numActions = Math.floor(Math.random() * (maxActions - minActions + 1)) + minActions;
+
+            let hasLeft = false;
+            let hasRight = false;
+
+            // Build a random sequence
+            for (let i = 0; i < numActions; i++) {
+                const remaining = numActions - i;
+
+                // Ensure we add both rotation types before running out of actions
+                if (!hasLeft && remaining <= 2) {
+                    solution.push('rotate-left');
+                    hasLeft = true;
+                } else if (!hasRight && remaining <= 1) {
+                    solution.push('rotate-right');
+                    hasRight = true;
+                } else {
+                    // Random action with higher chance for movements
+                    const rand = Math.random();
+                    if (rand < 0.4) {
+                        solution.push('forward');
+                    } else if (rand < 0.6) {
+                        solution.push('backward');
+                    } else if (rand < 0.8 && !hasLeft) {
+                        solution.push('rotate-left');
+                        hasLeft = true;
+                    } else if (rand < 1.0 && !hasRight) {
+                        solution.push('rotate-right');
+                        hasRight = true;
+                    } else {
+                        solution.push('forward');
+                    }
+                }
+            }
+
+            return solution;
+        }
+
+        // Simulate a solution and return the final position and direction
+        function simulateSolution(solution, startPos, startDir) {
+            let pos = { ...startPos };
+            let dir = startDir;
+
+            for (const action of solution) {
+                switch (action) {
+                    case 'forward':
+                        const fwd = moveForward(pos, dir);
+                        if (!isValidPosition(fwd.pos)) return null;
+                        pos = fwd.pos;
+                        break;
+                    case 'backward':
+                        const bwd = moveBackward(pos, dir);
+                        if (!isValidPosition(bwd.pos)) return null;
+                        pos = bwd.pos;
+                        break;
+                    case 'rotate-left':
+                        dir = rotateLeft(dir);
+                        break;
+                    case 'rotate-right':
+                        dir = rotateRight(dir);
+                        break;
+                }
+            }
+
+            return { pos, dir };
+        }
+
+        // Place walls that don't block the solution path
+        function placeWallsAroundSolution(solution) {
+            // Trace the solution path
+            const path = [];
+            let pos = { ...gameState.startPos };
+            let dir = gameState.startDir;
+
+            path.push({ ...pos });
+
+            for (const action of solution) {
+                if (action === 'forward') {
+                    const fwd = moveForward(pos, dir);
+                    pos = fwd.pos;
+                    path.push({ ...pos });
+                } else if (action === 'backward') {
+                    const bwd = moveBackward(pos, dir);
+                    pos = bwd.pos;
+                    path.push({ ...pos });
+                } else if (action === 'rotate-left') {
+                    dir = rotateLeft(dir);
+                } else if (action === 'rotate-right') {
+                    dir = rotateRight(dir);
+                }
+            }
+
+            // Place random walls that are not on the path
+            const numWalls = Math.floor(Math.random() * 4) + 2; // 2-5 walls
+            let placed = 0;
+            let attempts = 0;
+
+            while (placed < numWalls && attempts < 50) {
+                attempts++;
+                const wallPos = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+
+                // Check if wall is on the path
+                const onPath = path.some(p => p.x === wallPos.x && p.y === wallPos.y);
+                if (onPath) continue;
+
+                // Check if wall already exists
+                const exists = gameState.walls.some(w => w.x === wallPos.x && w.y === wallPos.y);
+                if (exists) continue;
+
+                gameState.walls.push(wallPos);
+                placed++;
+            }
         }
 
         // Validate that a solution actually works
@@ -657,127 +759,6 @@
 
             // Check if we reached the end
             return testPos.x === gameState.endPos.x && testPos.y === gameState.endPos.y;
-        }
-
-        // Generate walls ensuring a path exists
-        function generateWalls() {
-            const numWalls = Math.floor(Math.random() * 5) + 3; // 3-7 walls
-            let attempts = 0;
-
-            while (gameState.walls.length < numWalls && attempts < 100) {
-                const wallPos = {
-                    x: Math.floor(Math.random() * GRID_SIZE),
-                    y: Math.floor(Math.random() * GRID_SIZE)
-                };
-
-                // Don't place wall on start or end
-                if ((wallPos.x === gameState.startPos.x && wallPos.y === gameState.startPos.y) ||
-                    (wallPos.x === gameState.endPos.x && wallPos.y === gameState.endPos.y)) {
-                    attempts++;
-                    continue;
-                }
-
-                // Don't place duplicate walls
-                if (gameState.walls.some(w => w.x === wallPos.x && w.y === wallPos.y)) {
-                    attempts++;
-                    continue;
-                }
-
-                // Temporarily add wall and check if path exists
-                gameState.walls.push(wallPos);
-
-                if (!pathExists()) {
-                    gameState.walls.pop();
-                }
-
-                attempts++;
-            }
-        }
-
-        // Check if a path exists using BFS
-        function pathExists() {
-            const visited = new Set();
-            const queue = [{ ...gameState.startPos }];
-
-            while (queue.length > 0) {
-                const current = queue.shift();
-                const key = `${current.x},${current.y}`;
-
-                if (visited.has(key)) continue;
-                visited.add(key);
-
-                if (current.x === gameState.endPos.x && current.y === gameState.endPos.y) {
-                    return true;
-                }
-
-                // Check all 4 directions
-                const neighbors = [
-                    { x: current.x, y: current.y - 1 },
-                    { x: current.x + 1, y: current.y },
-                    { x: current.x, y: current.y + 1 },
-                    { x: current.x - 1, y: current.y }
-                ];
-
-                for (const neighbor of neighbors) {
-                    if (neighbor.x >= 0 && neighbor.x < GRID_SIZE &&
-                        neighbor.y >= 0 && neighbor.y < GRID_SIZE &&
-                        !gameState.walls.some(w => w.x === neighbor.x && w.y === neighbor.y) &&
-                        !visited.has(`${neighbor.x},${neighbor.y}`)) {
-                        queue.push(neighbor);
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        // Find solution using BFS with directions
-        function findSolution() {
-            const visited = new Map();
-            const queue = [{
-                pos: { ...gameState.startPos },
-                dir: gameState.playerDir,
-                actions: []
-            }];
-
-            let maxLength = 12; // Maximum solution length to explore
-
-            while (queue.length > 0) {
-                const current = queue.shift();
-                const key = `${current.pos.x},${current.pos.y},${current.dir}`;
-
-                // Skip if too long
-                if (current.actions.length > maxLength) continue;
-
-                const visitedLength = visited.get(key);
-                if (visitedLength !== undefined && visitedLength < current.actions.length) continue;
-                visited.set(key, current.actions.length);
-
-                if (current.pos.x === gameState.endPos.x && current.pos.y === gameState.endPos.y) {
-                    return current.actions;
-                }
-
-                // Try all possible actions
-                const possibleActions = [
-                    { type: 'forward', ...moveForward(current.pos, current.dir) },
-                    { type: 'backward', ...moveBackward(current.pos, current.dir) },
-                    { type: 'rotate-left', pos: current.pos, dir: rotateLeft(current.dir) },
-                    { type: 'rotate-right', pos: current.pos, dir: rotateRight(current.dir) }
-                ];
-
-                for (const action of possibleActions) {
-                    if (!isValidPosition(action.pos)) continue;
-
-                    queue.push({
-                        pos: action.pos,
-                        dir: action.dir,
-                        actions: [...current.actions, action.type]
-                    });
-                }
-            }
-
-            // If no solution found, return fallback with both rotation types
-            return ['forward', 'rotate-right', 'forward', 'rotate-left', 'forward'];
         }
 
         // Movement helpers
