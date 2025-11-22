@@ -536,40 +536,90 @@
             gameState.isExecuting = false;
             gameState.sequence = [];
 
-            // Clear grid
-            gameState.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
-            gameState.walls = [];
+            let attempts = 0;
+            let validLevel = false;
 
-            // Generate random start and end positions
-            do {
-                gameState.startPos = {
-                    x: Math.floor(Math.random() * GRID_SIZE),
-                    y: Math.floor(Math.random() * GRID_SIZE)
-                };
-                gameState.endPos = {
-                    x: Math.floor(Math.random() * GRID_SIZE),
-                    y: Math.floor(Math.random() * GRID_SIZE)
-                };
-            } while (
-                (gameState.startPos.x === gameState.endPos.x && gameState.startPos.y === gameState.endPos.y) ||
-                Math.abs(gameState.startPos.x - gameState.endPos.x) + Math.abs(gameState.startPos.y - gameState.endPos.y) < 3
-            );
+            // Keep generating until we get a level with both rotation types
+            while (!validLevel && attempts < 50) {
+                attempts++;
 
-            // Set player position and random direction
-            gameState.playerPos = { ...gameState.startPos };
-            gameState.playerDir = DIRECTIONS[Math.floor(Math.random() * 4)];
-            gameState.startDir = gameState.playerDir;
+                // Clear grid
+                gameState.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+                gameState.walls = [];
 
-            // Generate walls (ensuring path exists)
-            generateWalls();
+                // Generate random start and end positions
+                do {
+                    gameState.startPos = {
+                        x: Math.floor(Math.random() * GRID_SIZE),
+                        y: Math.floor(Math.random() * GRID_SIZE)
+                    };
+                    gameState.endPos = {
+                        x: Math.floor(Math.random() * GRID_SIZE),
+                        y: Math.floor(Math.random() * GRID_SIZE)
+                    };
+                } while (
+                    (gameState.startPos.x === gameState.endPos.x && gameState.startPos.y === gameState.endPos.y) ||
+                    Math.abs(gameState.startPos.x - gameState.endPos.x) + Math.abs(gameState.startPos.y - gameState.endPos.y) < 3
+                );
 
-            // Generate solution and available actions
-            generateSolution();
+                // Set player position and random direction
+                gameState.playerPos = { ...gameState.startPos };
+                gameState.playerDir = DIRECTIONS[Math.floor(Math.random() * 4)];
+                gameState.startDir = gameState.playerDir;
+
+                // Generate walls (ensuring path exists)
+                generateWalls();
+
+                // Generate solution and available actions
+                const solution = findSolution();
+
+                // Check if solution contains both rotation types
+                const hasLeft = solution.includes('rotate-left');
+                const hasRight = solution.includes('rotate-right');
+
+                if (hasLeft && hasRight) {
+                    gameState.availableActions = [...solution];
+                    validLevel = true;
+                }
+            }
+
+            // If we couldn't find a balanced level after many attempts, force it
+            if (!validLevel) {
+                const solution = findSolution();
+                gameState.availableActions = forceBalancedRotations(solution);
+            }
+
+            // Shuffle the available actions for display
+            for (let i = gameState.availableActions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [gameState.availableActions[i], gameState.availableActions[j]] =
+                [gameState.availableActions[j], gameState.availableActions[i]];
+            }
 
             // Render everything
             renderGrid();
             renderDirectionButtons();
             renderSequence();
+        }
+
+        // Force a solution to have both rotation types
+        function forceBalancedRotations(solution) {
+            const hasLeft = solution.includes('rotate-left');
+            const hasRight = solution.includes('rotate-right');
+
+            if (hasLeft && hasRight) return solution;
+
+            // Add compensating rotations that cancel out
+            if (!hasLeft && hasRight) {
+                // Add 2 rotate-left + 2 rotate-right at the start (net zero rotation)
+                return ['rotate-left', 'rotate-right', 'rotate-left', 'rotate-right', ...solution];
+            } else if (hasLeft && !hasRight) {
+                // Add 2 rotate-right + 2 rotate-left at the start (net zero rotation)
+                return ['rotate-right', 'rotate-left', 'rotate-right', 'rotate-left', ...solution];
+            } else {
+                // No rotations at all, add both types
+                return ['rotate-right', 'rotate-left', ...solution];
+            }
         }
 
         // Generate walls ensuring a path exists
@@ -644,22 +694,8 @@
             return false;
         }
 
-        // Generate solution and create available actions
-        function generateSolution() {
-            const solution = findSolution();
-            gameState.availableActions = [...solution];
-
-            // Shuffle the available actions for display
-            for (let i = gameState.availableActions.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [gameState.availableActions[i], gameState.availableActions[j]] =
-                [gameState.availableActions[j], gameState.availableActions[i]];
-            }
-        }
-
         // Find solution using BFS with directions
         function findSolution() {
-            const solutions = [];
             const visited = new Map();
             const queue = [{
                 pos: { ...gameState.startPos },
@@ -667,27 +703,24 @@
                 actions: []
             }];
 
-            let maxLength = 15; // Maximum solution length to explore
+            let maxLength = 12; // Maximum solution length to explore
 
             while (queue.length > 0) {
                 const current = queue.shift();
                 const key = `${current.pos.x},${current.pos.y},${current.dir}`;
 
-                // Skip if too long or already visited with shorter path
+                // Skip if too long
                 if (current.actions.length > maxLength) continue;
 
                 const visitedLength = visited.get(key);
-                if (visitedLength !== undefined && visitedLength <= current.actions.length) continue;
+                if (visitedLength !== undefined && visitedLength < current.actions.length) continue;
                 visited.set(key, current.actions.length);
 
                 if (current.pos.x === gameState.endPos.x && current.pos.y === gameState.endPos.y) {
-                    solutions.push([...current.actions]);
-                    // Continue searching for alternative solutions
-                    if (solutions.length >= 10) break; // Limit number of solutions to explore
-                    continue;
+                    return current.actions;
                 }
 
-                // Try all possible actions (randomize order for variety)
+                // Try all possible actions
                 const possibleActions = [
                     { type: 'forward', ...moveForward(current.pos, current.dir) },
                     { type: 'backward', ...moveBackward(current.pos, current.dir) },
@@ -706,58 +739,8 @@
                 }
             }
 
-            // If no solution found, fallback
-            if (solutions.length === 0) {
-                return ['forward', 'rotate-right', 'forward', 'rotate-left', 'forward'];
-            }
-
-            // Prefer solutions that use both rotate-left and rotate-right
-            const balancedSolutions = solutions.filter(sol =>
-                sol.includes('rotate-left') && sol.includes('rotate-right')
-            );
-
-            if (balancedSolutions.length > 0) {
-                // Choose a random balanced solution
-                return balancedSolutions[Math.floor(Math.random() * balancedSolutions.length)];
-            }
-
-            // If no balanced solution, enhance the shortest one
-            const shortestSolution = solutions.reduce((shortest, current) =>
-                current.length < shortest.length ? current : shortest
-            );
-
-            // Add diversity by inserting complementary rotations
-            return enhanceSolutionWithBothRotations(shortestSolution);
-        }
-
-        // Enhance solution to include both rotation types
-        function enhanceSolutionWithBothRotations(solution) {
-            const hasLeft = solution.includes('rotate-left');
-            const hasRight = solution.includes('rotate-right');
-
-            if (hasLeft && hasRight) return solution;
-
-            // Find a rotation in the solution and add its opposite before it
-            const enhanced = [...solution];
-
-            for (let i = 0; i < enhanced.length; i++) {
-                if (enhanced[i] === 'rotate-left' && !hasRight) {
-                    // Add rotate-right before and after to maintain same final direction
-                    enhanced.splice(i, 0, 'rotate-right', 'rotate-right', 'rotate-right');
-                    return enhanced;
-                } else if (enhanced[i] === 'rotate-right' && !hasLeft) {
-                    // Add rotate-left before and after to maintain same final direction
-                    enhanced.splice(i, 0, 'rotate-left', 'rotate-left', 'rotate-left');
-                    return enhanced;
-                }
-            }
-
-            // If no rotations at all, add some at the beginning
-            if (!hasLeft && !hasRight) {
-                return ['rotate-right', 'rotate-left', ...enhanced];
-            }
-
-            return enhanced;
+            // If no solution found, return fallback with both rotation types
+            return ['forward', 'rotate-right', 'forward', 'rotate-left', 'forward'];
         }
 
         // Movement helpers
