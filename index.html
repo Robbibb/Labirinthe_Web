@@ -659,6 +659,7 @@
 
         // Find solution using BFS with directions
         function findSolution() {
+            const solutions = [];
             const visited = new Map();
             const queue = [{
                 pos: { ...gameState.startPos },
@@ -666,18 +667,27 @@
                 actions: []
             }];
 
+            let maxLength = 15; // Maximum solution length to explore
+
             while (queue.length > 0) {
                 const current = queue.shift();
                 const key = `${current.pos.x},${current.pos.y},${current.dir}`;
 
-                if (visited.has(key)) continue;
-                visited.set(key, true);
+                // Skip if too long or already visited with shorter path
+                if (current.actions.length > maxLength) continue;
+
+                const visitedLength = visited.get(key);
+                if (visitedLength !== undefined && visitedLength <= current.actions.length) continue;
+                visited.set(key, current.actions.length);
 
                 if (current.pos.x === gameState.endPos.x && current.pos.y === gameState.endPos.y) {
-                    return current.actions;
+                    solutions.push([...current.actions]);
+                    // Continue searching for alternative solutions
+                    if (solutions.length >= 10) break; // Limit number of solutions to explore
+                    continue;
                 }
 
-                // Try all possible actions
+                // Try all possible actions (randomize order for variety)
                 const possibleActions = [
                     { type: 'forward', ...moveForward(current.pos, current.dir) },
                     { type: 'backward', ...moveBackward(current.pos, current.dir) },
@@ -686,20 +696,68 @@
                 ];
 
                 for (const action of possibleActions) {
-                    const newKey = `${action.pos.x},${action.pos.y},${action.dir}`;
+                    if (!isValidPosition(action.pos)) continue;
 
-                    if (!visited.has(newKey) && isValidPosition(action.pos)) {
-                        queue.push({
-                            pos: action.pos,
-                            dir: action.dir,
-                            actions: [...current.actions, action.type]
-                        });
-                    }
+                    queue.push({
+                        pos: action.pos,
+                        dir: action.dir,
+                        actions: [...current.actions, action.type]
+                    });
                 }
             }
 
-            // Fallback: simple path
-            return ['forward', 'rotate-right', 'forward'];
+            // If no solution found, fallback
+            if (solutions.length === 0) {
+                return ['forward', 'rotate-right', 'forward', 'rotate-left', 'forward'];
+            }
+
+            // Prefer solutions that use both rotate-left and rotate-right
+            const balancedSolutions = solutions.filter(sol =>
+                sol.includes('rotate-left') && sol.includes('rotate-right')
+            );
+
+            if (balancedSolutions.length > 0) {
+                // Choose a random balanced solution
+                return balancedSolutions[Math.floor(Math.random() * balancedSolutions.length)];
+            }
+
+            // If no balanced solution, enhance the shortest one
+            const shortestSolution = solutions.reduce((shortest, current) =>
+                current.length < shortest.length ? current : shortest
+            );
+
+            // Add diversity by inserting complementary rotations
+            return enhanceSolutionWithBothRotations(shortestSolution);
+        }
+
+        // Enhance solution to include both rotation types
+        function enhanceSolutionWithBothRotations(solution) {
+            const hasLeft = solution.includes('rotate-left');
+            const hasRight = solution.includes('rotate-right');
+
+            if (hasLeft && hasRight) return solution;
+
+            // Find a rotation in the solution and add its opposite before it
+            const enhanced = [...solution];
+
+            for (let i = 0; i < enhanced.length; i++) {
+                if (enhanced[i] === 'rotate-left' && !hasRight) {
+                    // Add rotate-right before and after to maintain same final direction
+                    enhanced.splice(i, 0, 'rotate-right', 'rotate-right', 'rotate-right');
+                    return enhanced;
+                } else if (enhanced[i] === 'rotate-right' && !hasLeft) {
+                    // Add rotate-left before and after to maintain same final direction
+                    enhanced.splice(i, 0, 'rotate-left', 'rotate-left', 'rotate-left');
+                    return enhanced;
+                }
+            }
+
+            // If no rotations at all, add some at the beginning
+            if (!hasLeft && !hasRight) {
+                return ['rotate-right', 'rotate-left', ...enhanced];
+            }
+
+            return enhanced;
         }
 
         // Movement helpers
